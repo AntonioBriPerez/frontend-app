@@ -8,45 +8,59 @@
     <style>
         body { background-color: #0f172a; color: #e2e8f0; font-family: monospace; }
         .terminal { background-color: #000; border: 1px solid #334155; height: 400px; overflow-y: auto; }
-        .btn { transition: all 0.2s; }
+        /* Efecto de botón presionado */
+        .btn { transition: transform 0.1s; }
         .btn:active { transform: scale(0.95); }
+        /* Scrollbar personalizada */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
     </style>
 </head>
 <body>
     <div id="app" class="container mx-auto p-10">
         <h1 class="text-3xl mb-8 font-bold text-green-500">🛡️ AntonioAuth System v1.0</h1>
 
-        <div class="grid grid-cols-2 gap-8">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div class="space-y-6">
                 
-                <div class="p-6 bg-slate-800 rounded-lg border border-slate-700">
-                    <h2 class="text-xl mb-4 text-blue-400">1. Autenticación (OAuth)</h2>
-                    <p class="text-sm text-slate-400 mb-4">Pide un Token firmado al puerto 8080.</p>
-                    <button @click="login" :disabled="loading" class="btn w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                <div class="p-6 bg-slate-800 rounded-lg border border-slate-700 shadow-lg">
+                    <h2 class="text-xl mb-4 text-blue-400 font-bold">1. Autenticación (OAuth Server)</h2>
+                    <p class="text-sm text-slate-400 mb-4">Solicita un JWT firmado (RS256) al puerto 8080.</p>
+                    
+                    <button @click="login" :disabled="loading" class="btn w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50">
                         🔐 Obtener Token
                     </button>
-                    <div v-if="token" class="mt-4 p-2 bg-slate-900 text-green-400 text-xs break-all rounded border border-green-900">
-                        {{ token }}
+                    
+                    <div v-if="token" class="mt-4">
+                        <label class="text-xs text-gray-500">Access Token (JWT):</label>
+                        <div class="p-2 bg-slate-900 text-green-400 text-xs break-all rounded border border-green-900 font-mono">
+                            {{ token }}
+                        </div>
                     </div>
                 </div>
 
-                <div class="p-6 bg-slate-800 rounded-lg border border-slate-700 opacity-50" :class="{'opacity-100': token}">
-                    <h2 class="text-xl mb-4 text-purple-400">2. Datos Protegidos (API)</h2>
-                    <p class="text-sm text-slate-400 mb-4">Usa el token para pedir datos al puerto 3000.</p>
-                    <button @click="getDashboard" :disabled="!token || loading" class="btn w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded">
-                        🚀 Consultar API Secreta
+                <div class="p-6 bg-slate-800 rounded-lg border border-slate-700 shadow-lg transition-opacity duration-300" 
+                     :class="{'opacity-50': !token, 'opacity-100': token}">
+                    <h2 class="text-xl mb-4 text-purple-400 font-bold">2. Recurso Protegido (Python API)</h2>
+                    <p class="text-sm text-slate-400 mb-4">Usa el token para pedir datos secretos al puerto 3000.</p>
+                    
+                    <button @click="getDashboard" :disabled="!token || loading" class="btn w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50 disabled:cursor-not-allowed">
+                        🚀 Consultar API
                     </button>
+                    
                     <div v-if="dashboardData" class="mt-4 p-4 bg-slate-900 rounded border border-purple-900">
-                        <pre class="text-green-300 text-sm">{{ dashboardData }}</pre>
+                        <pre class="text-green-300 text-sm overflow-x-auto">{{ dashboardData }}</pre>
                     </div>
                 </div>
 
             </div>
 
             <div>
-                <h2 class="text-xl mb-2 text-gray-400">📟 Live Logs</h2>
-                <div class="terminal p-4 rounded text-sm shadow-lg">
-                    <div v-for="(log, i) in logs" :key="i" class="mb-1">
+                <h2 class="text-xl mb-2 text-gray-400 font-bold">📟 Live System Logs</h2>
+                <div class="terminal p-4 rounded text-sm font-mono shadow-xl relative">
+                    <div v-if="logs.length === 0" class="text-gray-600 italic absolute top-4 left-4">Esperando acciones...</div>
+                    <div v-for="(log, index) in logs" :key="index" class="mb-1 border-b border-gray-900 pb-1">
                         <span class="text-gray-500">[{{ log.time }}]</span>
                         <span :class="log.color">{{ log.message }}</span>
                     </div>
@@ -65,7 +79,7 @@
                     dashboardData: null,
                     loading: false,
                     logs: [],
-                    // URLs apuntando a los túneles de tu máquina local
+                    // Apuntamos a los túneles locales (Port Forwarding)
                     oauthUrl: 'http://localhost:8080/token',
                     apiUrl: 'http://localhost:3000/dashboard'
                 }
@@ -73,47 +87,72 @@
             methods: {
                 addLog(msg, type = 'info') {
                     const time = new Date().toLocaleTimeString();
-                    const color = type === 'error' ? 'text-red-400' : (type === 'success' ? 'text-green-400' : 'text-white');
+                    let color = 'text-gray-300';
+                    if (type === 'success') color = 'text-green-400 font-bold';
+                    if (type === 'error') color = 'text-red-400 font-bold';
+                    if (type === 'warn') color = 'text-yellow-400';
                     this.logs.unshift({ time, message: msg, color });
                 },
                 async login() {
                     this.loading = true;
-                    this.addLog(`📡 Llamando a ${this.oauthUrl}...`);
+                    this.addLog("🚀 Iniciando flujo OAuth Client Credentials...", 'warn');
+                    this.addLog(`📡 POST ${this.oauthUrl}`);
+                    
                     try {
-                        // Llamada al Backend Go
-                        const res = await fetch(this.oauthUrl, {
+                        const response = await fetch(this.oauthUrl, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                client_id: "mi-app-python",
+                                client_id: "mi-app-python", 
                                 client_secret: "secreto_super_seguro",
                                 grant_type: "client_credentials"
                             })
                         });
-                        if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
-                        const data = await res.json();
-                        this.token = data.access_token; // Guardamos token en RAM
-                        this.addLog("✅ Token recibido y guardado.", 'success');
+
+                        if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+                        
+                        const data = await response.json();
+                        this.token = data.access_token;
+                        this.addLog("✅ Token JWT firmado recibido.", 'success');
                     } catch (e) {
-                        this.addLog(`❌ Fallo en Login: ${e.message}`, 'error');
-                    } finally { this.loading = false; }
+                        this.addLog(`❌ Error en Login: ${e.message}`, 'error');
+                        if (e.message.includes("Failed to fetch")) {
+                            this.addLog("💡 Consejo: Verifica que el túnel al puerto 8080 esté abierto.", 'warn');
+                        }
+                    } finally {
+                        this.loading = false;
+                    }
                 },
                 async getDashboard() {
                     this.loading = true;
-                    this.addLog(`🚀 Consultando API con Token...`);
+                    this.addLog("🚀 Solicitando acceso al Dashboard Python...", 'warn');
+                    this.addLog(`🛡️ Header: Authorization Bearer ...`);
+                    
                     try {
-                        // Llamada al Backend Python inyectando el Token
-                        const res = await fetch(this.apiUrl, {
+                        const response = await fetch(this.apiUrl, {
                             method: 'GET',
-                            headers: { 'Authorization': `Bearer ${this.token}` }
+                            headers: {
+                                'Authorization': `Bearer ${this.token}`
+                            }
                         });
-                        if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
-                        const data = await res.json();
+
+                        if (!response.ok) {
+                            if (response.status === 401) this.addLog("⛔ 401: Token inválido o expirado", 'error');
+                            else throw new Error(`HTTP ${response.status}`);
+                            return;
+                        }
+
+                        const data = await response.json();
                         this.dashboardData = data;
-                        this.addLog("✅ Datos desencriptados recibidos.", 'success');
+                        this.addLog("✅ Acceso Concedido. JSON recibido.", 'success');
                     } catch (e) {
-                        this.addLog(`❌ Fallo en API: ${e.message}`, 'error');
-                    } finally { this.loading = false; }
+                        this.addLog(`❌ Error API: ${e.message}`, 'error');
+                         if (e.message.includes("Failed to fetch")) {
+                            this.addLog("💡 Consejo: Verifica que el túnel al puerto 3000 esté abierto.", 'warn');
+                        }
+                    } finally {
+                        this.loading = false;
+                    }
                 }
             }
         }).mount('#app')
