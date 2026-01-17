@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>DevOps Secure Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        body { background-color: #0f172a; color: #e2e8f0; font-family: monospace; }
+        .terminal { background-color: #000; border: 1px solid #334155; height: 400px; overflow-y: auto; }
+        .btn { transition: all 0.2s; }
+        .btn:active { transform: scale(0.95); }
+    </style>
+</head>
+<body>
+    <div id="app" class="container mx-auto p-10">
+        <h1 class="text-3xl mb-8 font-bold text-green-500">🛡️ AntonioAuth System v1.0</h1>
+
+        <div class="grid grid-cols-2 gap-8">
+            <div class="space-y-6">
+                
+                <div class="p-6 bg-slate-800 rounded-lg border border-slate-700">
+                    <h2 class="text-xl mb-4 text-blue-400">1. Autenticación (OAuth)</h2>
+                    <p class="text-sm text-slate-400 mb-4">Pide un Token firmado al puerto 8080.</p>
+                    <button @click="login" :disabled="loading" class="btn w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                        🔐 Obtener Token
+                    </button>
+                    <div v-if="token" class="mt-4 p-2 bg-slate-900 text-green-400 text-xs break-all rounded border border-green-900">
+                        {{ token }}
+                    </div>
+                </div>
+
+                <div class="p-6 bg-slate-800 rounded-lg border border-slate-700 opacity-50" :class="{'opacity-100': token}">
+                    <h2 class="text-xl mb-4 text-purple-400">2. Datos Protegidos (API)</h2>
+                    <p class="text-sm text-slate-400 mb-4">Usa el token para pedir datos al puerto 3000.</p>
+                    <button @click="getDashboard" :disabled="!token || loading" class="btn w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded">
+                        🚀 Consultar API Secreta
+                    </button>
+                    <div v-if="dashboardData" class="mt-4 p-4 bg-slate-900 rounded border border-purple-900">
+                        <pre class="text-green-300 text-sm">{{ dashboardData }}</pre>
+                    </div>
+                </div>
+
+            </div>
+
+            <div>
+                <h2 class="text-xl mb-2 text-gray-400">📟 Live Logs</h2>
+                <div class="terminal p-4 rounded text-sm shadow-lg">
+                    <div v-for="(log, i) in logs" :key="i" class="mb-1">
+                        <span class="text-gray-500">[{{ log.time }}]</span>
+                        <span :class="log.color">{{ log.message }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue
+
+        createApp({
+            data() {
+                return {
+                    token: '',
+                    dashboardData: null,
+                    loading: false,
+                    logs: [],
+                    // URLs apuntando a los túneles de tu máquina local
+                    oauthUrl: 'http://localhost:8080/token',
+                    apiUrl: 'http://localhost:3000/dashboard'
+                }
+            },
+            methods: {
+                addLog(msg, type = 'info') {
+                    const time = new Date().toLocaleTimeString();
+                    const color = type === 'error' ? 'text-red-400' : (type === 'success' ? 'text-green-400' : 'text-white');
+                    this.logs.unshift({ time, message: msg, color });
+                },
+                async login() {
+                    this.loading = true;
+                    this.addLog(`📡 Llamando a ${this.oauthUrl}...`);
+                    try {
+                        // Llamada al Backend Go
+                        const res = await fetch(this.oauthUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                client_id: "mi-app-python",
+                                client_secret: "secreto_super_seguro",
+                                grant_type: "client_credentials"
+                            })
+                        });
+                        if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
+                        const data = await res.json();
+                        this.token = data.access_token; // Guardamos token en RAM
+                        this.addLog("✅ Token recibido y guardado.", 'success');
+                    } catch (e) {
+                        this.addLog(`❌ Fallo en Login: ${e.message}`, 'error');
+                    } finally { this.loading = false; }
+                },
+                async getDashboard() {
+                    this.loading = true;
+                    this.addLog(`🚀 Consultando API con Token...`);
+                    try {
+                        // Llamada al Backend Python inyectando el Token
+                        const res = await fetch(this.apiUrl, {
+                            method: 'GET',
+                            headers: { 'Authorization': `Bearer ${this.token}` }
+                        });
+                        if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
+                        const data = await res.json();
+                        this.dashboardData = data;
+                        this.addLog("✅ Datos desencriptados recibidos.", 'success');
+                    } catch (e) {
+                        this.addLog(`❌ Fallo en API: ${e.message}`, 'error');
+                    } finally { this.loading = false; }
+                }
+            }
+        }).mount('#app')
+    </script>
+</body>
+</html>
